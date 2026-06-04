@@ -1,0 +1,49 @@
+# Render.com Blueprint — one-click pilot deploy.
+# Deploy: push to GitHub, then New + Blueprint in Render and point at this repo.
+# (Equivalents exist for Fly.io / Railway / AWS ECS — see docs/RUNBOOK.md.)
+databases:
+  - name: farmingos-db
+    databaseName: farmingos
+    user: farmingos
+    plan: starter           # has pgvector available; run the initial migration on first deploy
+
+services:
+  - type: redis
+    name: farmingos-redis
+    plan: starter
+    ipAllowList: []         # internal only
+
+  - type: web
+    name: farmingos-api
+    runtime: docker
+    dockerfilePath: ./infra/backend.Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: DATABASE_URL
+        fromDatabase: { name: farmingos-db, property: connectionString }
+      - key: REDIS_URL
+        fromService: { type: redis, name: farmingos-redis, property: connectionString }
+      - key: MODEL_PROVIDER
+        value: mock          # switch to openai/anthropic/gemini + set LLM_API_KEY to go live
+      - key: JWT_SECRET
+        generateValue: true  # Render generates a strong secret
+      - key: CORS_ORIGINS
+        sync: false          # set to your web origin, e.g. https://farmingos-web.onrender.com
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+
+  - type: web
+    name: farmingos-web
+    runtime: docker
+    dockerfilePath: ./infra/web.Dockerfile
+    dockerContext: .
+    envVars:
+      - key: VITE_API_BASE
+        sync: false          # set to the API service URL + /v1

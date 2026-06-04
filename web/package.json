@@ -1,0 +1,21 @@
+{
+  "name": "farmingos-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "FarmingOS web frontends — farmer app, ground-staff price portal, admin, officer (role-gated SPA).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.8"
+  }
+}

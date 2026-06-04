@@ -1,0 +1,21 @@
+# FarmingOS backend — Python 3.11 target (runs on 3.9+).
+# Pinned loosely; lockfile generated in CI.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+sqlalchemy>=2.0
+alembic>=1.13
+pydantic>=2.5
+pydantic-settings>=2.1
+PyJWT>=2.8
+python-multipart>=0.0.9
+httpx>=0.26
+# Production-only (not required for the SQLite/mock dev run):
+psycopg2-binary>=2.9          # Postgres driver
+pgvector>=0.2.5               # vector column type for KnowledgeChunk.embedding
+redis>=5.0                    # session/context cache, rate limits
+boto3>=1.34                   # S3-compatible object storage
+argon2-cffi>=23.1             # password hashing (prod replacement for pbkdf2)
+# Dev/test
+pytest>=8.0
+# Lets PEP 604 (`X | None`) annotations resolve on Python < 3.10 (prod is 3.11).
+eval_type_backport>=0.2 ; python_version < "3.10"

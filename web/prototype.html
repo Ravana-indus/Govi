@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FarmingOS — interactive prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Sinhala:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{--green:#1b7a3e;--green-d:#135a2d;--amber:#e8a23d;--bg:#eef1ea;--card:#fff;--ink:#1f2421;--muted:#6b7280;--line:#e4e7e2;--danger:#c0392b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Noto Sans Sinhala","Noto Sans Tamil",system-ui,sans-serif}
+  .phone{max-width:430px;margin:18px auto;background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.12)}
+  .bar{background:var(--green);color:#fff;padding:.8rem 1rem;display:flex;align-items:center;gap:.6rem}
+  .bar .b{font-weight:700} .bar .t{font-size:.72rem;opacity:.85}
+  .langs{margin-left:auto;display:flex;gap:.25rem}
+  .langs button{border:1px solid rgba(255,255,255,.45);background:transparent;color:#fff;border-radius:6px;padding:.18rem .42rem;font-size:.72rem;cursor:pointer}
+  .langs button.on{background:#fff;color:var(--green);font-weight:700}
+  .tabs{display:flex;background:var(--green-d)}
+  .tabs button{flex:1;border:0;background:transparent;color:#fff;opacity:.7;padding:.55rem;font-size:.8rem;cursor:pointer;border-bottom:3px solid transparent}
+  .tabs button.on{opacity:1;border-bottom-color:var(--amber);font-weight:600}
+  .view{padding:1rem;min-height:520px}
+  h3{margin:.1rem 0 .8rem}
+  label{display:block;font-size:.8rem;color:var(--muted);margin:.55rem 0 .22rem}
+  input,select{width:100%;padding:.55rem .65rem;border:1px solid var(--line);border-radius:9px;font:inherit;background:#fff}
+  .btn{background:var(--green);color:#fff;border:0;border-radius:9px;padding:.6rem 1rem;font:inherit;font-weight:600;cursor:pointer;margin-top:.7rem}
+  .btn:hover{background:var(--green-d)} .btn.amber{background:var(--amber);color:#3a2a08}
+  .btn.sm{padding:.32rem .6rem;font-size:.78rem;margin:0}
+  .row{display:flex;gap:.55rem}.row>*{flex:1}
+  .dots{display:flex;gap:.35rem;margin-bottom:.7rem}.dots span{width:8px;height:8px;border-radius:50%;background:var(--line)}.dots span.on{background:var(--green)}
+  .chat{display:flex;flex-direction:column;gap:.5rem;min-height:330px}
+  .msg{max-width:85%;padding:.55rem .75rem;border-radius:14px;line-height:1.42;white-space:pre-wrap;font-size:.9rem}
+  .msg.in{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:4px}
+  .msg.out{align-self:flex-start;background:#e9ece7;border-bottom-left-radius:4px}
+  .meta{display:block;margin-top:.35rem}
+  .pill{display:inline-block;font-size:.68rem;padding:.1rem .48rem;border-radius:999px;background:#dfe5dd;color:var(--muted);margin-right:.25rem}
+  .pill.reco{background:#e3f4e9;color:var(--green-d);font-weight:700}.pill.warn{background:#fbe7d6;color:#9a5a08}
+  .composer{display:flex;gap:.4rem;margin-top:.7rem}.composer input{flex:1}
+  .chips{display:flex;gap:.4rem;margin-top:.5rem;flex-wrap:wrap}.chip{font-size:.74rem;border:1px solid var(--line);background:#fff;border-radius:999px;padding:.3rem .6rem;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:.4rem}th,td{text-align:left;padding:.38rem .35rem;border-bottom:1px solid var(--line)}
+  .barpct{height:10px;background:var(--line);border-radius:999px;overflow:hidden}.barpct>i{display:block;height:100%;background:var(--green)}
+  .muted{color:var(--muted);font-size:.82rem}.flash{color:var(--green);font-size:.82rem;margin-top:.4rem}
+  .esc{border:1px solid var(--line);border-radius:10px;padding:.6rem;margin-bottom:.5rem}
+  .note{background:#f4f7f2;border:1px dashed var(--line);border-radius:10px;padding:.6rem .7rem;font-size:.78rem;color:var(--muted);margin-top:.6rem}
+  .tag{font-size:.62rem;background:#fff3;padding:.1rem .4rem;border-radius:5px;margin-left:.3rem}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="bar">
+    <div>
+      <div class="b">🌱 FarmingOS <span class="tag">prototype</span></div>
+      <div class="t" id="tagline">Prices &amp; plant health, in your language</div>
+    </div>
+    <div class="langs" id="langs"></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="view" id="view"></div>
+</div>
+
+<script>
+/* ---------- Faithful in-browser replica of the backend logic ---------- */
+const FARMER={lat:7.47,lng:80.62,district:"Matale"};
+const TRANSPORT=0.3; // LKR/km/kg  (matches PRICE_TRANSPORT_LKR_PER_KM)
+const STALE_DAYS=3, CROP_THRESH=0.6;
+const MARKETS=[
+  {id:"dambulla",name:"Dambulla DEC",lat:7.8742,lng:80.6511},
+  {id:"colombo",name:"Colombo Manning Market",lat:6.9388,lng:79.8542},
+  {id:"nuwara",name:"Nuwara Eliya Economic Centre",lat:6.9497,lng:80.7891},
+];
+const CROPS=["Tomato","Big Onion","Carrot","Cabbage","Green Chili","Samba Rice","Beetroot"];
+// latest price per market + trend (mirrors seed.py)
+const PRICES={
+  Tomato:{dambulla:{min:130,max:145,days:0,trend:"rising"},colombo:{min:170,max:188,days:0,trend:"flat"},nuwara:{min:140,max:160,days:0,trend:"flat"}},
+  "Big Onion":{dambulla:{min:200,max:230,days:0,trend:"flat"},colombo:{min:230,max:260,days:0,trend:"flat"}},
+  Carrot:{nuwara:{min:150,max:175,days:0,trend:"flat"}},
+  Cabbage:{nuwara:{min:90,max:110,days:0,trend:"flat"}},
+};
+const NAMES={Tomato:{si:"තක්කාලි",ta:"தக்காளி"},"Big Onion":{si:"ලොකු ලූනු",ta:"பெரிய வெங்காயம்"},Carrot:{si:"කැරට්",ta:"கேரட்"},Cabbage:{si:"ගෝවා",ta:"முட்டைக்கோஸ்"},"Green Chili":{si:"අමු මිරිස්",ta:"பச்சை மிளகாய்"},"Samba Rice":{si:"සම්බා සහල්",ta:"சம்பா அரிசி"},Beetroot:{si:"බීට්රූට්",ta:"பீட்ரூட்"}};
+const T={
+ en:{tagline:"Prices & plant health, in your language",farmer:"Farmer",portal:"Price Portal",officer:"Officer",admin:"Admin",
+   welcome:"Welcome — set up in under 3 minutes.",phone:"Phone number",send:"Send code",otp:"Code",district:"District",
+   consent:"I agree my data is used only to give me better advice.",finish:"Finish & start",ask:"Ask a price, e.g. 'tomato price'",
+   summary:(c,p,m,d,tr,r)=>`Best net price for ${c}: ${p} LKR/kg at ${m} (${d} km away). 7-day trend: ${tr}. My advice: ${r}.`,
+   sell:"sell now",hold:"hold for now",go:(m)=>`take it to ${m}`,rising:"rising",flat:"steady",falling:"falling",
+   nodata:(c)=>`I don't have recent prices for ${c} near you yet. An officer has been notified to add them.`,
+   diag:(l,c)=>`Likely issue: ${l} (confidence ${c}%).`,steps:"Suggested steps:",
+   escalate:"I'm not confident enough from this photo to advise safely. I've asked an extension officer to review it. Please send a clearer, well-lit close-up of the affected leaf.",
+   coverage:"Today's coverage",entry:"Daily price entry",min:"Min (LKR/kg)",max:"Max (LKR/kg)",save:"Save price",
+   officerq:"Escalation queue (Matale)",claim:"Claim",resolve:"Resolve",resolved:"resolved"},
+ si:{tagline:"මිල සහ පැළ සෞඛ්‍යය, ඔබේ භාෂාවෙන්",farmer:"ගොවියා",portal:"මිල පෝට්ලය",officer:"නිලධාරී",admin:"පරිපාලක",
+   welcome:"සාදරයෙන් පිළිගනිමු — මිනිත්තු 3කින්.",phone:"දුරකථන අංකය",send:"කේතය එවන්න",otp:"කේතය",district:"දිස්ත්‍රික්කය",
+   consent:"මගේ දත්ත වඩා හොඳ උපදෙස් සඳහා පමණක් භාවිතා කරයි.",finish:"අවසන් කර අරඹන්න",ask:"මිලක් අහන්න, උදා: 'තක්කාලි මිල'",
+   summary:(c,p,m,d,tr,r)=>`${c} සඳහා හොඳම ශුද්ධ මිල: ${m} හිදී ${p} LKR/kg (${d} km). දින 7 ප්‍රවණතාව: ${tr}. මගේ උපදෙස: ${r}.`,
+   sell:"දැන් විකුණන්න",hold:"තවත් රඳවා ගන්න",go:(m)=>`${m} වෙත ගෙන යන්න`,rising:"ඉහළ යමින්",flat:"ස්ථාවරයි",falling:"පහළ යමින්",
+   nodata:(c)=>`ඔබ අසල ${c} සඳහා මෑත මිල තවම නැත. නිලධාරියෙකුට දැනුම් දී ඇත.`,
+   diag:(l,c)=>`සම්භාවිත ගැටලුව: ${l} (විශ්වාසය ${c}%).`,steps:"යෝජිත පියවර:",
+   escalate:"මෙම ඡායාරූපයෙන් ආරක්ෂිතව උපදෙස් දීමට ප්‍රමාණවත් විශ්වාසයක් නැත. නිලධාරියෙකුට යොමු කර ඇත. කරුණාකර හානි වූ කොළයේ පැහැදිලි ඡායාරූපයක් එවන්න.",
+   coverage:"අද ආවරණය",entry:"දෛනික මිල ඇතුළත් කිරීම",min:"අවම",max:"උපරිම",save:"මිල සුරකින්න",
+   officerq:"escalation පෝලිම (මාතලේ)",claim:"භාරගන්න",resolve:"විසඳන්න",resolved:"විසඳා ඇත"},
+ ta:{tagline:"விலை & தாவர ஆரோக்கியம், உங்கள் மொழியில்",farmer:"விவசாயி",portal:"விலை போர்ட்டல்",officer:"அலுவலர்",admin:"நிர்வாகி",
+   welcome:"வரவேற்கிறோம் — 3 நிமிடங்களில்.",phone:"தொலைபேசி எண்",send:"குறியீடு அனுப்பு",otp:"குறியீடு",district:"மாவட்டம்",
+   consent:"சிறந்த ஆலோசனைக்காக மட்டுமே எனது தரவு பயன்படுத்தப்படும்.",finish:"முடித்து தொடங்கு",ask:"விலையைக் கேளுங்கள், எ.கா 'தக்காளி விலை'",
+   summary:(c,p,m,d,tr,r)=>`${c}க்கான சிறந்த நிகர விலை: ${m} இல் ${p} LKR/kg (${d} km). 7-நாள் போக்கு: ${tr}. என் ஆலோசனை: ${r}.`,
+   sell:"இப்போது விற்கவும்",hold:"வைத்திருங்கள்",go:(m)=>`${m}க்கு எடுத்துச் செல்லுங்கள்`,rising:"உயர்கிறது",flat:"நிலையானது",falling:"குறைகிறது",
+   nodata:(c)=>`உங்கள் அருகில் ${c}க்கு சமீபத்திய விலை இல்லை. அதிகாரிக்கு அறிவிக்கப்பட்டது.`,
+   diag:(l,c)=>`சாத்தியமான பிரச்சினை: ${l} (நம்பிக்கை ${c}%).`,steps:"பரிந்துரைக்கப்பட்ட படிகள்:",
+   escalate:"இந்தப் புகைப்படத்தில் பாதுகாப்பாக ஆலோசனை வழங்க போதிய நம்பிக்கை இல்லை. அதிகாரிக்கு அனுப்பப்பட்டது. தெளிவான இலைப் புகைப்படத்தை அனுப்பவும்.",
+   coverage:"இன்றைய கவரேஜ்",entry:"தினசரி விலை பதிவு",min:"குறைந்த",max:"அதிக",save:"சேமி",
+   officerq:"escalation வரிசை (மாத்தளை)",claim:"எடு",resolve:"தீர்",resolved:"தீர்க்கப்பட்டது"},
+};
+const STEPS=["Remove and destroy affected lower leaves; do not compost them.","Improve airflow — stake plants and widen spacing.","Avoid overhead watering; water at the base in the morning.","Apply a recommended fungicide (mancozeb/chlorothalonil) per label, every 7–10 days in wet weather.","Rotate away from tomato/potato/brinjal next season."];
+
+function haversine(a,b,c,d){const R=6371,r=Math.PI/180;const p1=a*r,p2=c*r,dp=(c-a)*r,dl=(d-b)*r;const x=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return Math.round(2*R*Math.asin(Math.sqrt(x))*10)/10}
+function priceConf(days,n){let c=1;if(days>STALE_DAYS)c-=Math.min(.5,.1*(days-STALE_DAYS));if(n<=1)c-=.2;return Math.max(.1,Math.round(c*100)/100)}
+function options(crop){const pm=PRICES[crop]||{};const out=[];for(const m of MARKETS){const p=pm[m.id];if(!p)continue;const mid=(p.min+p.max)/2;const dist=haversine(FARMER.lat,FARMER.lng,m.lat,m.lng);const net=Math.round((mid-TRANSPORT*dist)*10)/10;out.push({name:m.name,min:p.min,max:p.max,dist,net,days:p.days,trend:p.trend})}out.sort((a,b)=>b.net-a.net);return out}
+function decide(best,opts){if(best.trend==="rising")return"hold";if(best.dist>25&&opts.length>1&&best.net>opts[1].net*1.05)return"go:"+best.name;return"sell"}
+function priceReply(crop,lang){const t=T[lang];const cn=lang==="en"?crop:(NAMES[crop]?.[lang]||crop);const opts=options(crop);if(!opts.length)return{text:t.nodata(cn),escalate:true,conf:.15};const b=opts[0];const d=decide(b,opts);const reco=d==="sell"?t.sell:d==="hold"?t.hold:t.go(b.name);const conf=priceConf(b.days,opts.length);let txt=t.summary(cn,b.net,b.name,b.dist,t[b.trend],reco);if(b.days>STALE_DAYS)txt+=" ⚠";return{text:txt,reco:d.replace("go:","→ "),conf,opts}}
+
+/* ---------- UI state ---------- */
+let lang="si", tab="farmer", step=0;
+let chat=[], escalations=[], covered=3, total=7, onboarded=false, assistedMode=false;
+const HOLDING={en:"Thanks — an officer is reviewing your question and will reply shortly.",si:"ස්තූතියි — නිලධාරියෙක් ඔබේ ප්‍රශ්නය සමාලෝචනය කරමින් සිටී, ඉක්මනින් පිළිතුරු දෙයි.",ta:"நன்றி — ஒரு அலுவலர் உங்கள் கேள்வியை மதிப்பாய்வு செய்து விரைவில் பதிலளிப்பார்."};
+const $=id=>document.getElementById(id);
+
+function renderShell(){
+  const t=T[lang];$("tagline").textContent=t.tagline;
+  $("langs").innerHTML=["si","ta","en"].map(l=>`<button class="${l===lang?'on':''}" onclick="setLang('${l}')">${l.toUpperCase()}</button>`).join("");
+  $("tabs").innerHTML=[["farmer",t.farmer],["portal",t.portal],["admin",t.admin],["officer",t.officer]].map(([k,v])=>`<button class="${k===tab?'on':''}" onclick="setTab('${k}')">${v}</button>`).join("");
+  renderView();
+}
+function setLang(l){lang=l;renderShell()} function setTab(k){tab=k;renderView();renderShell()}
+
+function renderView(){const t=T[lang];const v=$("view");
+  if(tab==="farmer")return onboarded?renderChat():renderOnboard();
+  if(tab==="portal")return renderPortal();
+  if(tab==="admin")return renderAdmin();
+  return renderOfficer();
+}
+const KBDOCS=[
+  {title:"Tomato blight management",topic:"disease",status:"validated",v:1},
+  {title:"Tomato leaf curl virus management",topic:"disease",status:"validated",v:1},
+  {title:"Big Onion purple blotch management",topic:"disease",status:"validated",v:1},
+  {title:"Balanced fertilizer guidance",topic:"fertilizer",status:"validated",v:1},
+];
+let cropThreshold=0.60;
+function renderAdmin(){
+  const advised=1, acted=1, outcome=1;
+  $("view").innerHTML=`<h3>Admin / Knowledge Base</h3>
+   <b>Knowledge documents</b>
+   <table><thead><tr><th>Title</th><th>Topic</th><th>Status</th></tr></thead><tbody>
+     ${KBDOCS.map(d=>`<tr><td>${d.title}</td><td>${d.topic}</td><td><span class="pill reco">${d.status}</span></td></tr>`).join("")}
+   </tbody></table>
+   <div style="margin-top:1rem"><b>Feature flags</b></div>
+   <label>Crop Doctor confidence threshold: <b id="thv">${cropThreshold.toFixed(2)}</b></label>
+   <input type="range" min="0.3" max="0.95" step="0.05" value="${cropThreshold}" oninput="cropThreshold=parseFloat(this.value);document.getElementById('thv').textContent=cropThreshold.toFixed(2)"/>
+   <p class="muted">Below this, a diagnosis escalates to an officer instead of advising. (Live-tunable — the Crop Doctor reads it per request.)</p>
+   <label style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem"><input type="checkbox" ${assistedMode?"checked":""} onchange="assistedMode=this.checked" style="width:auto"/> <span>Assisted mode — an officer fronts every AI answer (pilot). Try it, then ask a price on the Farmer tab.</span></label>
+   <div style="margin-top:1rem"><b>North-star &amp; usage</b></div>
+   <div class="row" style="margin-top:.4rem">
+     <div style="flex:1;background:#f4f7f2;border-radius:10px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:var(--green-d)">${advised}</div><div class="muted">advised</div></div>
+     <div style="flex:1;background:#f4f7f2;border-radius:10px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:var(--green-d)">100%</div><div class="muted">acted</div></div>
+     <div style="flex:1;background:#f4f7f2;border-radius:10px;padding:.6rem;text-align:center"><div style="font-size:1.3rem;font-weight:700;color:var(--green-d)">${escalations.length}</div><div class="muted">escalations</div></div>
+   </div>
+   <div class="note">Admins author &amp; validate KB docs (only validated docs are retrievable), tune flags, and watch the north-star. Every Crop Doctor answer cites a validated doc.</div>`;
+}
+
+function renderOnboard(){const t=T[lang];
+  $("view").innerHTML=`<div class="dots">${[0,1,2].map(i=>`<span class="${i<=step?'on':''}"></span>`).join("")}</div>
+   <h3>${t.welcome}</h3>
+   ${step===0?`<label>${t.phone}</label><input id="ph" value="+9477 123 4567"/><button class="btn" onclick="step=1;renderView()">${t.send}</button>`:""}
+   ${step===1?`<label>${t.otp}</label><input value="255203"/><label>${t.district}</label><select><option>Matale</option><option>Kandy</option><option>Nuwara Eliya</option></select><button class="btn" onclick="step=2;renderView()">${T[lang].finish==='Finish & start'?'Next':'➜'}</button>`:""}
+   ${step===2?`<label style="display:flex;gap:.5rem;align-items:flex-start"><input type="checkbox" checked style="width:auto;margin-top:.2rem"/><span>${t.consent}</span></label><button class="btn" onclick="onboarded=true;chat=[{d:'out',text:T[lang].ask}];renderView()">${t.finish}</button>`:""}
+   <div class="note">Phone is identity (OTP). Location drives nearest-market pricing. Consent is captured &amp; timestamped, and your data is yours — export or delete it anytime (Sri Lanka PDPA).</div>`;
+}
+
+function renderChat(){const t=T[lang];
+  $("view").innerHTML=`<div class="chat" id="cl"></div>
+    <div class="composer"><input id="q" placeholder="${t.ask}"/><button class="btn" onclick="ask()">➤</button></div>
+    <div class="chips"><span class="chip" onclick="quick('tomato')">🍅 tomato price</span><span class="chip" onclick="voiceNote()">🎤 voice note</span><span class="chip" onclick="photo(true)">📷 clear leaf</span><span class="chip" onclick="photo(false)">📷 blurry leaf</span></div>`;
+  drawChat();$("q").addEventListener("keydown",e=>{if(e.key==="Enter")ask()});
+}
+function drawChat(){const cl=$("cl");if(!cl)return;cl.innerHTML=chat.map(m=>`<div class="msg ${m.d}">${m.text}${(m.agent||m.reco||m.conf!=null)?`<span class="meta">${m.agent?`<span class="pill">${m.agent}</span>`:""}${m.reco?`<span class="pill reco">${m.reco}</span>`:""}${m.conf!=null?`<span class="pill">conf ${Math.round(m.conf*100)}%</span>`:""}${m.warn?`<span class="pill warn">escalated</span>`:""}</span>`:""}</div>`).join("");cl.scrollTop=cl.scrollHeight}
+function quick(c){$("q").value=c+" price";ask()}
+function ask(){const q=$("q").value.trim();if(!q)return;chat.push({d:"in",text:q});const low=q.toLowerCase();
+  let crop=CROPS.find(c=>low.includes(c.toLowerCase()))||(low.includes("beet")?"Beetroot":low.includes("tomato")||low.includes("තක්")||low.includes("தக்")?"Tomato":null);
+  if(crop){const r=priceReply(crop,lang);
+    if(assistedMode && !r.escalate){chat.push({d:"out",text:HOLDING[lang],agent:"price",reco:"held"});addEsc("assisted",crop+" price",r.text);}
+    else{chat.push({d:"out",text:r.text,agent:"price",reco:r.reco,conf:r.conf,warn:r.escalate});if(r.escalate)addEsc("price",crop);}}
+  else chat.push({d:"out",text:lang==="en"?"I can help with crop prices and plant health.":T[lang].ask});
+  $("q").value="";drawChat();
+}
+function voiceNote(){chat.push({d:"in",text:"🎤 voice note (3s)"});chat.push({d:"out",text:"📝 \""+ (lang==="en"?"tomato price":"තක්කාලි මිල") +"\"",agent:"asr"});drawChat();setTimeout(()=>{$("q").value="tomato price";ask();},250);}
+function photo(clear){const t=T[lang];chat.push({d:"in",text:"📷 leaf.jpg"});
+  if(clear){const draft=`${t.diag("early blight",67)}\n${t.steps}\n• ${STEPS.slice(0,3).join("\n• ")}\nSource: Tomato blight management.`;
+    if(assistedMode){chat.push({d:"out",text:HOLDING[lang],agent:"crop",reco:"held"});addEsc("assisted","leaf photo (early blight)",draft);}
+    else chat.push({d:"out",text:draft,agent:"crop",reco:"early_blight",conf:.67});}
+  else{chat.push({d:"out",text:t.escalate,agent:"crop",conf:.41,warn:true});addEsc("crop","blurry photo");}
+  drawChat();
+}
+function addEsc(type,reason,draft){escalations.push({id:"E"+(escalations.length+1+Math.floor(Math.random()*900)),type,reason,status:"open",draft});}
+
+function renderPortal(){const t=T[lang];const pct=Math.round(100*covered/total);
+  $("view").innerHTML=`<h3>${t.entry}</h3>
+   <div class="row"><div><label>Market</label><select>${MARKETS.map(m=>`<option>${m.name}</option>`).join("")}</select></div>
+   <div><label>Crop</label><select id="pc">${CROPS.map(c=>`<option>${c}</option>`).join("")}</select></div></div>
+   <div class="row"><div><label>${t.min}</label><input id="pmin" type="number" value="300"/></div><div><label>${t.max}</label><input id="pmax" type="number" value="340"/></div></div>
+   <button class="btn" onclick="savePrice()">${t.save}</button><div class="flash" id="pf"></div>
+   <h3 style="margin-top:1.2rem">${t.coverage}</h3>
+   <div class="barpct"><i style="width:${pct}%"></i></div>
+   <p class="muted">${pct}% — ${covered}/${total} market×crop cells filled today</p>
+   <div class="note">District-scoped &amp; audited. Bulk CSV upload supported: market_id,crop_id,price_min,price_max,observed_date.</div>`;
+}
+function savePrice(){covered=Math.min(total,covered+1);$("pf").textContent="✓ saved — coverage updated";renderPortal();setTimeout(()=>{const f=$("pf");if(f)f.textContent="";},10);}
+
+function renderOfficer(){const t=T[lang];
+  const items=escalations.length?escalations.map(e=>`<div class="esc"><b>${e.type.toUpperCase()}</b> · ${e.reason} <span class="pill ${e.status==='open'?'warn':'reco'}">${e.status==='resolved'?t.resolved:e.status}</span>
+    ${e.draft?`<div style="background:#f4f7f2;border-radius:8px;padding:.5rem;margin:.4rem 0;font-size:.82rem;white-space:pre-wrap">📝 AI draft:\n${e.draft}</div>`:"<br/>"}
+    ${e.status==='open'?`<button class="btn sm amber" style="margin-top:.2rem" onclick="claim('${e.id}')">${t.claim}</button>`:""}
+    ${e.status==='claimed'?`<button class="btn sm" style="margin-top:.2rem" onclick="resolve('${e.id}')">${e.draft?'Approve & send':t.resolve}</button>`:""}</div>`).join(""):`<p class="muted">No open escalations. Trigger one: send a blurry leaf, ask 'beetroot price', or turn on Assisted mode in Admin.</p>`;
+  $("view").innerHTML=`<h3>${t.officerq}</h3>${items}<div class="note">Human-in-the-loop: claim → view farmer context + AI draft → edit/approve → resolve. Powers assisted mode.</div>`;
+}
+function claim(id){const e=escalations.find(x=>x.id===id);if(e)e.status="claimed";renderOfficer()}
+function resolve(id){const e=escalations.find(x=>x.id===id);if(e)e.status="resolved";renderOfficer()}
+
+renderShell();
+</script>
+</body>
+</html>
