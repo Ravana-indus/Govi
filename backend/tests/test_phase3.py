@@ -104,6 +104,22 @@ def test_assisted_mode_holds_advisory_answer(client):
         client.patch("/v1/admin/settings", headers=admin, json={"assisted_mode": False})
 
 
+
+def test_missing_price_data_does_not_fall_back_to_advisory(client):
+    r = client.post("/v1/messages:ingest", json={
+        "channel": "tg",
+        "external_user_id": "missing-price-user",
+        "text": "beetroot price",
+    })
+
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["intent"] == "price"
+    assert body["agent"] == "price"
+    assert body["escalation_id"]
+    assert body["payload"]["escalate"] is True
+    assert "0117929494" not in body["reply"]
+
 # ---- Voice: inbound voice note is transcribed, routed, and gets a voice reply ----
 def _voice_bytes(target="tomato price"):
     gw = get_gateway()
