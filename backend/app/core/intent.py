@@ -5,11 +5,12 @@ use a deterministic bilingual keyword classifier — a legitimately fast, free
 classifier. Swapping in an LLM classifier means one call to gateway.complete with
 a classification prompt; the orchestrator contract is unchanged.
 
-Intents: price | crop_health | greeting | other.  (calendar/input_cost are LATER.)
+Intents: language | price | crop_health | greeting | other.
+(calendar/input_cost are LATER.)
 """
 from __future__ import annotations
 
-INTENTS = ("price", "crop_health", "greeting", "other")
+INTENTS = ("language", "price", "crop_health", "greeting", "other")
 
 _PRICE_KW = [
     "price", "rate", "cost", "sell", "market", "wholesale", "kg",
@@ -28,6 +29,32 @@ _GREET_KW = [
     "வணக்கம்", "ஹலோ",
 ]
 
+_LANG_COMMANDS = {
+    "ta": {
+        "ta", "tam", "tamil", "தமிழ்", "தமிழ", "demala", "දෙමළ",
+        "change to tamil", "switch to tamil", "language tamil",
+    },
+    "si": {
+        "si", "sin", "sinhala", "සිංහල", "sinhala language",
+        "change to sinhala", "switch to sinhala", "language sinhala",
+    },
+    "en": {
+        "en", "eng", "english", "ඉංග්‍රීසි", "ஆங்கிலம்",
+        "change to english", "switch to english", "language english",
+    },
+}
+
+
+def detect_language_command(text: str | None) -> str | None:
+    """Return a supported language code when text is a language switch command."""
+    if not text:
+        return None
+    t = " ".join(text.lower().strip().split())
+    for lang, commands in _LANG_COMMANDS.items():
+        if t in commands:
+            return lang
+    return None
+
 
 def classify_intent(text: str | None, *, has_image: bool = False) -> str:
     """Return one of INTENTS. An image always routes to the Crop Doctor."""
@@ -36,6 +63,8 @@ def classify_intent(text: str | None, *, has_image: bool = False) -> str:
     if not text:
         return "other"
     t = text.lower().strip()
+    if detect_language_command(t):
+        return "language"
     if any(k in t for k in _CROP_KW):
         return "crop_health"
     if any(k in t for k in _PRICE_KW):

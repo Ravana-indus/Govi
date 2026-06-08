@@ -1,5 +1,6 @@
 {
   "greeting": "Hello! Ask me a crop price, or send a photo of a sick plant.",
+  "language.updated": "Language changed to English.",
   "fallback": "I can help with crop prices and plant health. Try asking 'tomato price' or send a photo.",
   "assisted.holding": "Thanks — an agriculture officer is reviewing your question and will reply to you shortly.",
   "price.summary": "Best net price for {crop}: {price} {currency}/{unit} at {market} ({distance} km away). 7-day trend: {trend}. My advice: {reco}.",

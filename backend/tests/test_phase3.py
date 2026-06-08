@@ -38,6 +38,23 @@ def test_telegram_webhook_answers(client):
     assert "Tomato" in body.get("text", "") or "LKR" in body.get("text", "")
 
 
+def test_language_switch_command_updates_telegram_farmer(client):
+    user_id = "7799"
+    switch = client.post("/v1/messages:ingest", json={
+        "channel": "tg", "external_user_id": user_id, "text": "tamil",
+    })
+    assert switch.status_code == 200, switch.text
+    body = switch.json()
+    assert body["intent"] == "language"
+    assert body["reply"].startswith("மொழி")
+
+    greeting = client.post("/v1/messages:ingest", json={
+        "channel": "tg", "external_user_id": user_id, "text": "hi",
+    }).json()
+    assert greeting["intent"] == "greeting"
+    assert greeting["reply"].startswith("வணக்கம்")
+
+
 def test_general_farming_question_routes_to_advisory(client):
     r = client.post("/v1/messages:ingest", json={
         "channel": "tg",
