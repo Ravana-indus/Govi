@@ -10,6 +10,8 @@ Intents: language | price | crop_health | greeting | other.
 """
 from __future__ import annotations
 
+import re
+
 INTENTS = ("language", "price", "crop_health", "greeting", "other")
 
 _PRICE_KW = [
@@ -53,6 +55,19 @@ def detect_language_command(text: str | None) -> str | None:
     for lang, commands in _LANG_COMMANDS.items():
         if t in commands:
             return lang
+    return None
+
+
+def detect_text_language(text: str | None) -> str | None:
+    """Best-effort language detection for one short chat turn."""
+    if not text:
+        return None
+    if re.search(r"[\u0d80-\u0dff]", text):
+        return "si"
+    if re.search(r"[\u0b80-\u0bff]", text):
+        return "ta"
+    if re.search(r"[a-zA-Z]", text):
+        return "en"
     return None
 
 

@@ -19,7 +19,7 @@ from app.agents import advisory as advisory_agent
 from app.agents import crop as crop_agent
 from app.agents import price as price_agent
 from app.core import guardrails, memory, router
-from app.core.intent import detect_language_command
+from app.core.intent import detect_language_command, detect_text_language
 from app.db.models import Conversation, Farmer, Message
 from app.gateway import get_gateway
 from app.i18n import localize
@@ -91,8 +91,14 @@ def handle(db: Session, *, farmer: Farmer, channel: str, modality: str = "text",
         memory.append_turn(conv.id, "farmer", clean_text)
 
     requested_lang = detect_language_command(clean_text)
+    detected_lang = detect_text_language(clean_text)
     if requested_lang:
         lang = requested_lang
+    elif detected_lang and farmer.preferred_language == "si":
+        # Telegram does not force onboarding. New channel users default to Sinhala,
+        # so let obvious English/Tamil messages choose the response language until
+        # they explicitly set a preference.
+        lang = detected_lang
     context_text = _recent_farmer_context(conv.id)
     decision = router.route(
         db,
