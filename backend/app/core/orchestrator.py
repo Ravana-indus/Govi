@@ -2,7 +2,7 @@
 
 Input: a normalized message (text / voice / image) + resolved farmer + light
 conversation memory. Steps: transcribe voice -> image routes to Crop Doctor ->
-else classify intent -> attach context -> dispatch -> guardrails -> persist every
+else route intent -> attach context -> dispatch -> guardrails -> persist every
 turn -> localize -> (synthesize a voice reply for voice inbound) -> return.
 Low-confidence turns create an Escalation. When assisted mode is on, agent
 answers are held for an officer to front (Wizard-of-Oz pilot).
@@ -15,10 +15,11 @@ from dataclasses import asdict, dataclass
 
 from sqlalchemy.orm import Session
 
+from app.agents import advisory as advisory_agent
 from app.agents import crop as crop_agent
 from app.agents import price as price_agent
-from app.core import guardrails, memory
-from app.core.intent import classify_intent
+from app.core import guardrails, memory, router
+from app.core.intent import detect_language_command, detect_text_language
 from app.db.models import Conversation, Farmer, Message
 from app.gateway import get_gateway
 from app.i18n import localize
@@ -56,11 +57,21 @@ def _persist(db: Session, conv: Conversation, *, direction: str, modality: str,
     db.flush()
 
 
+def _recent_farmer_context(conversation_id: str) -> str:
+    history = memory.get_history(conversation_id)
+    turns = [
+        turn["text"] for turn in history[-6:]
+        if turn.get("role") == "farmer" and turn.get("text")
+    ]
+    return " ".join(turns)
+
+
 def handle(db: Session, *, farmer: Farmer, channel: str, modality: str = "text",
            text: str | None = None, media_url: str | None = None,
            media_bytes: bytes | None = None) -> Reply:
     lang = farmer.preferred_language or "si"
     conv = farmer_svc.open_conversation(db, farmer, channel)
+    previous_intent = conv.last_intent
     gw = get_gateway()
 
     # --- Voice inbound: transcribe to text, route on the transcript ---
@@ -79,18 +90,42 @@ def handle(db: Session, *, farmer: Farmer, channel: str, modality: str = "text",
     if clean_text:
         memory.append_turn(conv.id, "farmer", clean_text)
 
-    intent = classify_intent(clean_text, has_image=has_image)
+    requested_lang = detect_language_command(clean_text)
+    detected_lang = detect_text_language(clean_text)
+    if requested_lang:
+        lang = requested_lang
+    elif detected_lang and farmer.preferred_language == "si":
+        # Telegram does not force onboarding. New channel users default to Sinhala,
+        # so let obvious English/Tamil messages choose the response language until
+        # they explicitly set a preference.
+        lang = detected_lang
+    context_text = _recent_farmer_context(conv.id)
+    decision = router.route(
+        db,
+        text=clean_text,
+        modality=modality,
+        has_image=has_image,
+        previous_intent=previous_intent,
+        context_text=context_text,
+    )
+    intent = decision.intent
+    crop_id = decision.crop_id
+    price_text = decision.crop_text or clean_text
     agent_name: str | None = None
     confidence: float | None = None
     escalation_id: str | None = None
     payload: dict | None = None
     assisted = False
 
-    if intent == "greeting":
+    if intent == "language" and requested_lang:
+        farmer.preferred_language = requested_lang
+        lang = requested_lang
+        reply = localize("language.updated", lang)
+    elif intent == "greeting":
         reply = localize("greeting", lang)
     elif intent == "price":
         agent_name = "price"
-        out = price_agent.run(db, lang=lang, crop_text=clean_text,
+        out = price_agent.run(db, lang=lang, crop_id=crop_id, crop_text=price_text,
                               gps_lat=farmer.gps_lat, gps_lng=farmer.gps_lng)
         reply, confidence, payload = out.explanation_localized, out.confidence, out.model_dump()
         if out.escalate:
@@ -111,11 +146,23 @@ def handle(db: Session, *, farmer: Farmer, channel: str, modality: str = "text",
                                             reason=out.escalate_reason or "low_confidence",
                                             conversation_id=conv.id)
                 escalation_id = esc.id
+    elif intent == "farming_tip":
+        agent_name = "advisory"
+        out = advisory_agent.run(
+            db,
+            lang=lang,
+            question=clean_text or "",
+            crop_id=crop_id,
+            context_text=context_text,
+        )
+        reply = out["reply"]
+        confidence = out["confidence"]
+        payload = out["payload"]
     else:
-        reply = localize("fallback", lang)
+        reply = localize("other.agriculture_only", lang)
 
     # --- Assisted mode: hold a confident agent answer for an officer to front ---
-    if (agent_name in ("price", "crop") and escalation_id is None
+    if (agent_name in ("price", "crop", "advisory") and escalation_id is None
             and bool(settings_svc.get(db, "assisted_mode"))):
         esc = escalation_svc.create(
             db, farmer_id=farmer.id, type="assisted",

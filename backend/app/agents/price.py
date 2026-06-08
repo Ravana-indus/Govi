@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from app.agents.schemas import PriceAgentOutput, PriceMarketOption
 from app.config import settings
 from app.core import guardrails
-from app.gateway import get_gateway
 from app.i18n import localize
 from app.services import price as price_svc
 
@@ -43,6 +42,7 @@ def run(db: Session, *, lang: str = "si", crop_id: str | None = None,
         crop_text: str | None = None, gps_lat: float | None = None,
         gps_lng: float | None = None, quantity: float | None = None) -> PriceAgentOutput:
     crop = price_svc.get_crop(db, crop_id) if crop_id else price_svc.resolve_crop(db, crop_text)
+    requested_markets = price_svc.resolve_markets(db, crop_text)
 
     if not crop:
         return PriceAgentOutput(
@@ -54,6 +54,7 @@ def run(db: Session, *, lang: str = "si", crop_id: str | None = None,
     options = price_svc.market_options(
         db, crop_id=crop.id, gps_lat=gps_lat, gps_lng=gps_lng,
         n=settings.price_nearest_markets,
+        market_ids=[market.id for market in requested_markets] or None,
     )
 
     if not options:
@@ -83,10 +84,6 @@ def run(db: Session, *, lang: str = "si", crop_id: str | None = None,
     )
     if best["days_old"] > settings.price_stale_days:
         explanation += " " + localize("price.stale", lang, days=best["days_old"])
-
-    # Run through the model gateway for phrasing (mock returns unchanged) — keeps
-    # the provider seam exercised; a real model improves fluency/dialect.
-    explanation = get_gateway().complete(explanation).text
 
     return PriceAgentOutput(
         crop=crop_label,

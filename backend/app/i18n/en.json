@@ -1,5 +1,6 @@
 {
   "greeting": "Hello! Ask me a crop price, or send a photo of a sick plant.",
+  "language.updated": "Language changed to English.",
   "fallback": "I can help with crop prices and plant health. Try asking 'tomato price' or send a photo.",
   "assisted.holding": "Thanks — an agriculture officer is reviewing your question and will reply to you shortly.",
   "price.summary": "Best net price for {crop}: {price} {currency}/{unit} at {market} ({distance} km away). 7-day trend: {trend}. My advice: {reco}.",
@@ -21,6 +22,9 @@
   "crop.consult_officer": "If symptoms spread quickly or cover more than a few plants, consult your local agriculture officer.",
   "crop.source": "Source: {source}.",
   "crop.escalate": "I'm not confident enough from this photo to advise safely. I've asked an extension officer to review it. Please also send a clearer, well-lit close-up of the affected leaf.",
+  "advisory.warning": "This is general guidance. Please confirm with an agriculture officer or call 0117929494.",
+  "advisory.fallback": "I can give general farming guidance, but I could not prepare a detailed answer right now.",
+  "other.agriculture_only": "I can help with crop prices, crop disease, and farming guidance. Please ask an agriculture question.",
   "onboarding.welcome": "Welcome to FarmingOS",
   "onboarding.consent": "Your data is yours. We use it only to give you better advice, never to sell or surveil you. Do you consent?",
   "season.maha": "Maha season",

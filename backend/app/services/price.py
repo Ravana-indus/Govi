@@ -6,6 +6,8 @@ structures into a localized recommendation.
 from __future__ import annotations
 
 from datetime import date, timedelta
+from difflib import SequenceMatcher
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,20 +20,99 @@ from app.services.geo import haversine_km
 # --------------------------------------------------------------------------- #
 # Crop resolution
 # --------------------------------------------------------------------------- #
+_CROP_STOPWORDS = {
+    "a", "an", "and", "at", "for", "from", "in", "is", "kg", "market", "price",
+    "prices", "pricing", "rate", "rates", "sell", "the", "to", "today",
+}
+
+_CROP_ALIASES = {
+    "Tomato": ("tomato", "tomatoes", "tomoto", "tomatto"),
+    "Big Onion": ("big onion", "onion", "onions"),
+    "Green Chili": ("green chili", "green chilli", "chili", "chilli"),
+    "Samba Rice": ("samba rice", "rice"),
+}
+
+
+def _normalize(text: str | None) -> str:
+    return " ".join((text or "").lower().strip().split())
+
+
+def _ascii_words(text: str) -> list[str]:
+    return re.findall(r"[a-z]+", text.lower())
+
+
+def _contains_term(text: str, term: str) -> bool:
+    term = term.lower().strip()
+    if not term:
+        return False
+    if term.isascii():
+        return bool(re.search(rf"\b{re.escape(term)}\b", text))
+    return term in text
+
+
+def _crop_terms(crop: Crop) -> list[str]:
+    terms = [crop.name_en, crop.name_si, crop.name_ta]
+    terms.extend(_CROP_ALIASES.get(crop.name_en, ()))
+    return [t.lower().strip() for t in terms if t]
+
+
+def _crop_fuzzy_terms(crop: Crop) -> set[str]:
+    terms: set[str] = set()
+    for term in _crop_terms(crop):
+        if not term.isascii():
+            continue
+        for word in _ascii_words(term):
+            if len(word) >= 4 and word not in _CROP_STOPWORDS:
+                terms.add(word)
+    return terms
+
+
 def resolve_crop(db: Session, text: str | None) -> Crop | None:
     """Match a crop by any of its localized names appearing in free text."""
     if not text:
         return None
-    t = text.lower()
-    for crop in db.scalars(select(Crop)):
-        for name in (crop.name_en, crop.name_si, crop.name_ta):
-            if name and name.lower() in t:
+    t = _normalize(text)
+    crops = list(db.scalars(select(Crop)))
+    for crop in crops:
+        for term in _crop_terms(crop):
+            if _contains_term(t, term):
                 return crop
+
+    words = [
+        word for word in _ascii_words(t)
+        if len(word) >= 4 and word not in _CROP_STOPWORDS
+    ]
+    best: tuple[float, Crop | None] = (0.0, None)
+    for crop in crops:
+        for word in words:
+            for term in _crop_fuzzy_terms(crop):
+                score = SequenceMatcher(None, word, term).ratio()
+                if score > best[0]:
+                    best = (score, crop)
+    if best[0] >= 0.82:
+        return best[1]
     return None
 
 
 def get_crop(db: Session, crop_id: str) -> Crop | None:
     return db.get(Crop, crop_id)
+
+
+def resolve_markets(db: Session, text: str | None) -> list[Market]:
+    """Match explicitly requested markets such as Dambulla or Colombo."""
+    if not text:
+        return []
+    t = _normalize(text)
+    matches: list[Market] = []
+    for market in db.scalars(select(Market).order_by(Market.name)):
+        terms = [market.name, market.district]
+        terms.extend(
+            word for word in _ascii_words(market.name)
+            if len(word) >= 5 and word not in {"market", "centre", "center", "economic"}
+        )
+        if any(_contains_term(t, term) for term in terms if term):
+            matches.append(market)
+    return matches
 
 
 # --------------------------------------------------------------------------- #
@@ -55,12 +136,16 @@ def days_old(record: PriceRecord, today: date | None = None) -> int:
 
 
 def market_options(db: Session, *, crop_id: str, gps_lat: float | None,
-                   gps_lng: float | None, n: int | None = None) -> list[dict]:
+                   gps_lng: float | None, n: int | None = None,
+                   market_ids: list[str] | None = None) -> list[dict]:
     """Ranked market options with net price after estimated transport.
 
     Sorted by net_after_transport descending (best take-home first)."""
     n = n or settings.price_nearest_markets
     latest = _latest_per_market(db, crop_id)
+    if market_ids:
+        wanted = set(market_ids)
+        latest = {market_id: rec for market_id, rec in latest.items() if market_id in wanted}
     options: list[dict] = []
     for market_id, rec in latest.items():
         market = db.get(Market, market_id)
