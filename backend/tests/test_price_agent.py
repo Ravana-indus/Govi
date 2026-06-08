@@ -30,6 +30,15 @@ def test_price_unknown_crop_asks_which(db):
     assert "crop" in out.explanation_localized.lower()
 
 
+def test_price_resolves_common_crop_typo_and_market(db):
+    out = price_agent.run(db, lang="en", crop_text="tomoto price in colombo")
+
+    assert out.crop == "Tomato"
+    assert out.markets
+    assert out.markets[0].name == "Colombo Manning Market"
+    assert "Colombo Manning Market" in out.explanation_localized
+
+
 def test_price_no_data_escalates(db):
     # Beetroot is intentionally never priced (in seed or other tests) -> escalate.
     out = price_agent.run(db, lang="en", crop_text="beetroot", gps_lat=7.47, gps_lng=80.62)
